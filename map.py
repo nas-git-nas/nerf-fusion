@@ -34,11 +34,11 @@ class Map(nn.Module):
         """
         Forward pass of the map
         Args:
-            X: batch of points; torch.tensor (N, D)
-            D: batch of directions, normalized vectors indicating direction of view; torch.tensor (N, D)
+            X: batch of points; torch.tensor (I*R*M, D)
+            D: batch of directions, normalized vectors indicating direction of view; torch.tensor (I*R, D)
         Returns:
-            density: batch of densities from point X; torch.tensor (N, 1)
-            colour: batch of colours from point X and with viewing direction D; torch.tensor (N, 3)
+            density: batch of densities from point X; torch.tensor (I*R*M, 1)
+            colour: batch of colours from point X and with viewing direction D; torch.tensor (I*R*M, 3)
         """
         # concatenate encoding from every layer
         X_encoded = torch.empty(X.shape[0], 0)
@@ -64,15 +64,18 @@ class Map(nn.Module):
         """
         Encode direction vector D
         Args:
-            D: batch of directions, normalized vectors indicating direction of view; torch.tensor (N, D)
+            D: batch of directions, normalized vectors indicating direction of view; torch.tensor (I*R, D)
         Returns:
-            D_encoded: torch.tensor (N, f*D)
+            D_encoded: torch.tensor (I*R*M, f*D)
         """
         # encode direction
         D_encoded = torch.empty(D.shape[0], 0)
         for i in range(self.args.f):
             D_encoded = torch.cat((D_encoded, torch.sin(2**i * torch.pi * D)), dim=1)
             D_encoded = torch.cat((D_encoded, torch.cos(2**i * torch.pi * D)), dim=1)
+
+        # extand direction to match positions dimension
+        D_encoded = D_encoded.repeat(self.args.M, 1) # (I*R*M, D)
 
         return D_encoded
 
