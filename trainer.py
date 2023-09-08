@@ -35,7 +35,7 @@ class Trainer():
     def train(self):
 
         # load data and move it to current device
-        imgs, rays = self.data_loader.loadData(splits="train")
+        imgs, rays = self.data_loader.loadData(splits=["train"])
         imgs = torch.tensor(imgs["train"]).to(self.args.device)
         rays = torch.tensor(rays["train"]).to(self.args.device)
 
@@ -46,30 +46,32 @@ class Trainer():
             time_epoch = time.time()
 
         for epoch in range(self.args.nb_epochs):
+
+            # progress bar for one epoch
+            with alive_bar(imgs.shape[0] // self.args.I, bar = 'bubbles') as bar:
             
-            for j, batch in enumerate(self.sampler.iterData(imgs, rays)):
-                # unpack batch
-                points, directions, colours_gt = batch # (I*R*M, 3), (I*R, 3), (I*R, 4)
+                for j, batch in enumerate(self.sampler.iterData(imgs, rays)):
+                    # unpack batch
+                    points, directions, colours_gt = batch # (I*R*M, 3), (I*R, 3), (I*R, 4)
 
-                # forward pass through map
-                sample_dens, sample_col = self.map(X=points, D=directions) # (I*R*M,), (I*R*M, 3)
+                    # forward pass through map
+                    sample_dens, sample_col = self.map(X=points, D=directions) # (I*R*M,), (I*R*M, 3)
 
-                # estimate colour from sample densities and sample colours
-                colours = self._colourEstimation(sample_dens, sample_col, points) # (I*R, 3)
+                    # estimate colour from sample densities and sample colours
+                    colours = self._colourEstimation(sample_dens, sample_col, points) # (I*R, 3)
 
-                # compute colour loss
-                loss = self._colourLoss(colours, colours_gt)
-                self.losses_batch.append(loss.item())
+                    # compute colour loss
+                    loss = self._colourLoss(colours, colours_gt)
+                    self.losses_batch.append(loss.item())
 
-                # backpropagate
-                loss.backward()
-                self.optimizer.step()
-                self.optimizer.zero_grad()
+                    # backpropagate
+                    loss.backward()
+                    self.optimizer.step()
+                    self.optimizer.zero_grad()
 
-                # # progress bar for one epoch
-                # with alive_bar(self.sampler.nb_batches, bar = 'bubbles') as bar:
-                    # if self.args.verb_training:
-                    #     bar()
+                
+                    if self.args.verb_training:
+                        bar()
 
             if self.args.verb_training:
                 print(f"Epoch {epoch+1}/{self.args.nb_epochs}, \tloss: {np.mean(self.losses_batch[-self.sampler.nb_batches:]):.4f}, \
@@ -81,7 +83,7 @@ class Trainer():
 
     def test(self):
         # load data and move it to current device
-        imgs, rays = self.data_loader.loadData(splits="test")
+        imgs, rays = self.data_loader.loadData(splits=["test"])
         imgs = torch.tensor(imgs["test"]).to(self.args.device) # (N, H, W, 4)
         rays = torch.tensor(rays["test"]).to(self.args.device) # (N, ro+rd, H, W, 3)
 
@@ -93,30 +95,26 @@ class Trainer():
             time_batch = time.time()
 
         imgs_est = []
-        for i in range(imgs.shape[0]):
-            # height and width of image
-            H = imgs.shape[1]
-            W = imgs.shape[2]
-
-            coord = torch.meshgrid((torch.arange(H), torch.arange(W))) # [(H,W), (H,W))]
-            ray_coord = torch.stack((torch.zeros(H*W), coord[0].flatten(), coord[1].flatten()), dim=1) # (3, H*W)
-            ray_batch = rays[i].reshape(1, 2, H, W, 3) # (1, ro+rd, H, W, 3)
-            points, directions = self.sampler.samplePoints(ray_batch=ray_batch, ray_coord=ray_coord) # (H*W*M, 3), (H*W, 3)
-
-            colours_gt = imgs[i].reshape(1,H*W, 4) # (H*W, 4)
+        imgs_gt = []
+        for i, batch in enumerate(self.sampler.iterTestData(imgs, rays, downsample_factor=4)):
+            points, directions, colours_gt, h, w = batch # (h*w*M, 3), (h*w, 3), (h*w, 4), int, int
 
             # forward pass through map
             sample_dens, sample_col = self.map(X=points, D=directions) # (H*W*M,), (H*W*M, 3)
 
             # estimate colour from sample densities and sample colours
             colours = self._colourEstimation(sample_dens, sample_col, points) # (H*W, 3)
-            imgs_est.append(colours.reshape(H,W,3).detach().cpu().numpy())
+            imgs_est.append(colours.reshape(h,w,3).detach().cpu().numpy())
+            imgs_gt.append(colours_gt[:,:3].reshape(h,w,3).detach().cpu().numpy())
 
             # compute colour loss
             loss = self._colourLoss(colours, colours_gt)
             self.losses_test.append(loss.item())
 
-        imgs_gt = [imgs[i,:,:,:3].detach().cpu().numpy() for i in imgs.shape[0]]
+            if self.args.verb_training:
+                print(f"Image {i+1}/{imgs.shape[0]}, \tloss: {np.mean(self.losses_test[-1]):.4f}")
+
+        
         self.plot.showTestImgs(imgs_gt, imgs_est, self.losses_test)
 
     def _colourEstimation(self, sample_dens, sample_col, points):
@@ -130,9 +128,9 @@ class Trainer():
             colours: estimated colour of each ray, torch.tensor (I*R, 3)
         """
         # reshape from batch to nb. of rays times nb. of samples
-        density = sample_dens.reshape(self.args.I*self.args.R, self.args.M) # (I*R, M)
-        colour = sample_col.reshape(self.args.I*self.args.R, self.args.M, 3) # (I*R, M, 3)
-        points = points.reshape(self.args.I*self.args.R, self.args.M, 3) # (I*R, M, 3)
+        density = sample_dens.reshape(-1, self.args.M) # (I*R, M)
+        colour = sample_col.reshape(-1, self.args.M, 3) # (I*R, M, 3)
+        points = points.reshape(-1, self.args.M, 3) # (I*R, M, 3)
 
         # compute distance between points
         next_points = torch.roll(points, shifts=-1, dims=1) # (I*R, M, 3)
@@ -147,7 +145,6 @@ class Trainer():
         colours = torch.einsum('rm,rm,rmc->rc', transmittance, (1-torch.exp(-dens_dist)), colour) # (I*R, 3)
 
         return colours
-
 
     def _colourLoss(self, colours, colours_gt):
         """

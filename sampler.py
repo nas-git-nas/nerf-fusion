@@ -12,7 +12,7 @@ class Sampler():
 
         # random number generator
         self.rng = np.random.default_rng(self.args.rand_seed) 
-        self.nb_batches = self.args.load_nb_imgs["test"] // self.args.I # nb of batches per epoch     
+        self.nb_batches = None 
 
     def iterData(self, imgs, rays):
         """
@@ -43,7 +43,7 @@ class Sampler():
 
             # sample rays, points and colours
             ray_coord = self._sampleRays(img_batch) # (I*R, 3)
-            points, directions = self.samplePoints(ray_batch, ray_coord) # (I*R*M, 3), (I*R, 3)
+            points, directions = self._samplePoints(ray_batch, ray_coord) # (I*R*M, 3), (I*R, 3)
             colours_gt = self._sampleColours(img_batch, ray_coord) # (I*R, 4)
 
             # create data batch
@@ -57,7 +57,44 @@ class Sampler():
 
         # TODO: process left over images too
 
-    def samplePoints(self, ray_batch, ray_coord):
+    def iterTestData(self, imgs, rays, downsample_factor=1):
+        """
+        Iterate once through all test imgs and return a batch for every image.
+        Args:
+            imgs: images; torch.tensor (N, H, W, 4)
+            rays: rays; torch.tensor (N, ro+rd, H, W, 3)
+        Yields:
+            batch: batch of data (points, directions, colours_gt); tuple of torch.tensor (I*R*M, 3), (I*R, 3), (I*R, 4)
+        """
+        # downsample data
+        coord_H = np.arange(0, imgs.shape[1], step=downsample_factor, dtype=np.int32) # (h)
+        coord_W = np.arange(0, imgs.shape[2], step=downsample_factor, dtype=np.int32) # (w)
+        h = len(coord_H) # height of downsampled img
+        w = len(coord_W) # width of downsampled img
+        imgs = imgs[:,coord_H,:,:] # (N, h, W, 4)
+        imgs = imgs[:,:,coord_W,:] # (N, h, w, 4)
+        rays = rays[:,:,coord_H,:,:] # (N, ro+rd, h, W, 3)
+        rays = rays[:,:,:,coord_W,:] # (N, ro+rd, h, w, 3)
+
+        # get ray coordinates
+        coord = np.meshgrid(np.arange(h), np.arange(w)) # [(h, w), (h, w)]
+        ray_coord = np.stack((np.zeros(h*w), coord[0].flatten(), coord[1].flatten()), axis=1).astype(np.int32) # (h*w, 3)
+
+        # calculate points and direction for each ray
+        for i in range(imgs.shape[0]):
+            # sample points along ray
+            ray_batch = rays[i].reshape(1, 2, h, w, 3) # (1, ro+rd, h, w, 3)
+            points, directions = self._samplePoints(ray_batch=ray_batch, ray_coord=ray_coord) # (h*w*M, 3), (h*w, 3)
+
+            colours_gt = imgs[i].reshape(h*w, 4) # (h*w, 4)
+
+            # create data batch
+            batch = (points, directions, colours_gt, h, w) # (h*w*M, 3), (h*w, 3), (h*w, 4), int, int
+
+            yield batch
+
+
+    def _samplePoints(self, ray_batch, ray_coord):
         """
         Sample points from ray batch.
         Args:
@@ -80,7 +117,7 @@ class Sampler():
 
         # sample points on rays     
         points = np.linspace(ray_origins.detach().numpy(), ray_max.detach().numpy(), self.args.M) # (M, I*R, 3)
-        points = np.transpose(points, (1, 0, 2)).reshape(self.args.I*self.args.R*self.args.M, 3) # (I*R*M, 3)
+        points = np.transpose(points, (1, 0, 2)).reshape(ray_coord.shape[0]*self.args.M, 3) # (I*R*M, 3)
         points = torch.tensor(points).to(self.args.device)
 
         return points, ray_directions

@@ -17,7 +17,7 @@ class Args():
         # data
         self.data_dir = '../data/nerf_synthetic/lego'
         self.img_half_res = True
-        self.load_nb_imgs = {"test": 64, "train": 3, "val": 0}
+        self.load_nb_imgs = {"train": 100, "test": 2, "val": 0}
 
         # map (multi-layer hash encoding)
         self.D = 3 # nb of dimensions
@@ -29,11 +29,11 @@ class Args():
         self.res_max = 64     
 
         # training
-        self.nb_epochs = 1
+        self.nb_epochs = 10
         self.lr = 1e-4
         self.M = 128 # nb of samples per ray
-        self.R = 128 # nb of rays per image
-        self.I = 16 # nb of images per batch
+        self.R = 4096 # nb of rays per image
+        self.I = 2 # nb of images per batch
         self.N = None # dataset size (total number of images)
 
         # plotting

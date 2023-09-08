@@ -44,7 +44,7 @@ class Plotter():
             title2 = "Est: image " + str(i)
 
             if losses is not None:
-                titel2 += ", loss: " + str(losses[i])
+                title2 += ", loss: " + str(np.round(losses[i],4))
 
             ax1.set_title(title1)
             ax2.set_title(title2)
