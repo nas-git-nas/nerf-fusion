@@ -21,15 +21,17 @@ class DataLoader():
     def __init__(self, args:Args) -> None:
         self.args = args
 
-    def loadData(self):
+    def loadData(self, splits=['train', 'val', 'test']):
         """
         Load images and poses from the data directory and calculate rays for every image and pixel.
+        Args:
+            splits: list of splits to load; list of strings
         Returns:
             imgs: images; dict of numpy array of shape (N, H, W, 4)
             rays: rays; dict of numpy array of shape (N, ro+rd, H, W, 3)
         """
         # load images and poses
-        imgs, poses, render_poses, [H, W, focal], i_split = self._loadBlenderData(testskip=5)
+        splits, imgs, poses, render_poses, [H, W, focal], i_split = self._loadBlenderData(splits=splits)
 
         # calculate rays
         K = np.array([
@@ -40,13 +42,25 @@ class DataLoader():
         rays = np.stack([self._getRays(H, W, K, p) for p in poses[:,:3,:4]], 0) # [N, ro+rd, H, W, 3]
 
         # split data into train, val, test
-        imgs = {"train": imgs[i_split[0]], "val": imgs[i_split[1]], "test": imgs[i_split[2]]}
-        rays = {"train": rays[i_split[0]], "val": rays[i_split[1]], "test": rays[i_split[2]]}
+        imgs_dict = { s:imgs[i_split[s]] for s in splits}
+        rays_dict = { s:rays[i_split[s]] for s in splits}
 
-        return imgs, rays
+        return imgs_dict, rays_dict
 
-    def _loadBlenderData(self,  testskip=1):
-        splits = ['train', 'val', 'test']
+    def _loadBlenderData(self, splits):
+        """
+        Args:
+            splits: list of splits to load; list of strings
+        """
+
+        # remove split if now imgs are loaded
+        # remove_splits = []
+        # for s in splits:
+        #     if self.args.load_nb_imgs[s] == 0:
+        #         remove_splits.append(s)
+        # for s in remove_splits:
+        #     splits.remove(s)
+
         metas = {}
         for s in splits:
             with open(os.path.join(self.args.data_dir, 'transforms_{}.json'.format(s)), 'r') as fp:
@@ -59,22 +73,27 @@ class DataLoader():
             meta = metas[s]
             imgs = []
             poses = []
-            if s=='train' or testskip==0:
-                skip = 1
-            else:
-                skip = testskip
+
+            # if s=='train' or testskip==0:
+            #     skip = 1
+            # else:
+            #     skip = testskip
+
+            # calculate skip step size
+            step = len(meta['frames']) // self.args.load_nb_imgs[s]
                 
-            for frame in meta['frames'][::skip]:
+            for frame in meta['frames'][::step]:
                 fname = os.path.join(self.args.data_dir, frame['file_path'] + '.png')
                 imgs.append(imageio.imread(fname))
                 poses.append(np.array(frame['transform_matrix']))
+            
             imgs = (np.array(imgs) / 255.).astype(np.float32) # keep all 4 channels (RGBA)
             poses = np.array(poses).astype(np.float32)
             counts.append(counts[-1] + imgs.shape[0])
             all_imgs.append(imgs)
             all_poses.append(poses)
         
-        i_split = [np.arange(counts[i], counts[i+1]) for i in range(3)]
+        i_split = { s:np.arange(counts[i], counts[i+1]) for i, s in enumerate(splits) }
         
         imgs = np.concatenate(all_imgs, 0)
         poses = np.concatenate(all_poses, 0)
@@ -95,7 +114,7 @@ class DataLoader():
         if self.args.img_half_res:
             H, W, focal, imgs = self._halfResolution(H, W, focal, imgs)
            
-        return imgs, poses, render_poses, [H, W, focal], i_split
+        return splits, imgs, poses, render_poses, [H, W, focal], i_split
     
     def _halfResolution(self, H, W, focal, imgs):
             H = H//2
