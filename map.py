@@ -19,6 +19,11 @@ class Map(nn.Module):
         for i in range(self.args.L):
             self.grids.append(Grid(args=self.args, layer=i))
 
+        # Register parameters of the Grid instance as parameters of the Map instance
+        for i, grid in enumerate(self.grids):
+            for name, param in grid.named_parameters():
+                self.register_parameter(name+str(i), param)
+
         # density neural network
         self.density_lin1 = nn.Linear(self.args.L*self.args.F, 64)  # L*F -> 64
         self.density_lin2 = nn.Linear(64, 16)
@@ -44,11 +49,12 @@ class Map(nn.Module):
             colour: batch of colours from point X and with viewing direction D; torch.tensor (I*R*M, 3)
         """
         # concatenate encoding from every layer
-        X_encoded = torch.empty(X.shape[0], 0)
+        X_encoded = torch.empty(X.shape[0], 0).to(self.args.device)
         for grid in self.grids:
             X_encoded = torch.cat((X_encoded, grid.forward(X)), dim=1)
 
         # density prediction, vector of length 16 where the first element is the density
+        print(X_encoded.shape)
         density = self.relu(self.density_lin1(X_encoded))
         density = self.sigmoid(self.density_lin2(density))
 
@@ -72,7 +78,7 @@ class Map(nn.Module):
             D_encoded: torch.tensor (I*R*M, 2*f*D)
         """
         # encode direction
-        D_encoded = torch.empty(D.shape[0], 0)
+        D_encoded = torch.empty(D.shape[0], 0).to(self.args.device)
         for i in range(self.args.f):
             D_encoded = torch.cat((D_encoded, torch.sin(2**i * torch.pi * D)), dim=1)
             D_encoded = torch.cat((D_encoded, torch.cos(2**i * torch.pi * D)), dim=1)

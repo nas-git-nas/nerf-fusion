@@ -116,7 +116,7 @@ class Sampler():
         ray_max = ray_origins + t_max[:, None] * ray_directions
 
         # sample points on rays     
-        points = np.linspace(ray_origins.detach().numpy(), ray_max.detach().numpy(), self.args.M) # (M, I*R, 3)
+        points = np.linspace(ray_origins.detach().cpu().numpy(), ray_max.detach().cpu().numpy(), self.args.M) # (M, I*R, 3)
         points = np.transpose(points, (1, 0, 2)).reshape(ray_coord.shape[0]*self.args.M, 3) # (I*R*M, 3)
         points = torch.tensor(points).to(self.args.device)
 

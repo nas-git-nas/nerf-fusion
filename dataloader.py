@@ -41,6 +41,10 @@ class DataLoader():
             ])
         rays = np.stack([self._getRays(H, W, K, p) for p in poses[:,:3,:4]], 0) # [N, ro+rd, H, W, 3]
 
+        # convert rays such that all poses are in the cube [-1,1]**3
+        rays = self._scaleCoords(rays)
+        print(f"Rays max: {rays[:,0,:,:,:].max()}, Rays min: {rays[:,0,:,:,:].min()}")
+
         # split data into train, val, test
         imgs_dict = { s:imgs[i_split[s]] for s in splits}
         rays_dict = { s:rays[i_split[s]] for s in splits}
@@ -214,6 +218,29 @@ class DataLoader():
         # Translate camera frame's origin to the world frame. It is the origin of all rays.
         rays_o = np.broadcast_to(c2w[:3,-1], np.shape(rays_d))
         return rays_o, rays_d
+    
+
+    def _scaleCoords(self, rays):
+        """
+        Scale rays such that all positions are in the cube [-1,1]**3
+        and all directions are normalized.
+        Args:
+            rays: rays; np.array (N, ro+rd, H, W, 3)
+        Returns:
+            rays_scaled: scaled rays; np.array (N, ro+rd, H, W, 3)
+        """
+        rays_scaled = np.empty(rays.shape)
+
+        # convert rays such that all positions are in the cube [-1,1]**3
+        ro_max = rays[:,0,:,:,:].max()
+        ro_min = rays[:,0,:,:,:].min()
+        rays_scaled[:,0,:,:,:] = ((rays[:,0,:,:,:] - ro_min) / (ro_max - ro_min)) * 2 - 1
+        rays_scaled[:,0,:,:,:] = np.clip(rays_scaled[:,0,:,:,:], a_min=-1, a_max=1)
+
+        # normalize directions
+        rays_scaled[:,1,:,:,:] = rays[:,1,:,:,:] / np.linalg.norm(rays[:,1,:,:,:], axis=-1).reshape(rays.shape[0],rays.shape[2],rays.shape[3],1)
+
+        return rays_scaled
 
 
 

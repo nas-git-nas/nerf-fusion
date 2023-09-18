@@ -18,11 +18,14 @@ class Trainer():
     def __init__(self, args:Args) -> None:
         self.args = args
 
-        self.map = Map(args=args)
+        self.map = Map(args=args).to(self.args.device)
         self.data_loader = DataLoader(self.args)
         self.sampler = Sampler(self.args)
 
         # optimizer
+        # for name, param in self.map.named_parameters():
+        #     if param.requires_grad:
+        #         print(f"Name: {name}, param: {param.data}")
         self.optimizer = torch.optim.Adam(self.map.parameters(), lr=self.args.lr)
 
         # logging
@@ -48,7 +51,7 @@ class Trainer():
         for epoch in range(self.args.nb_epochs):
 
             # progress bar for one epoch
-            with alive_bar(imgs.shape[0] // self.args.I, bar = 'bubbles') as bar:
+            with alive_bar(imgs.shape[0] // self.args.I, bar = 'bubbles', receipt=False) as bar:
             
                 for j, batch in enumerate(self.sampler.iterData(imgs, rays)):
                     # unpack batch
@@ -59,6 +62,10 @@ class Trainer():
 
                     # estimate colour from sample densities and sample colours
                     colours = self._colourEstimation(sample_dens, sample_col, points) # (I*R, 3)
+
+                    print(f"colours: {colours.shape}, colours_gt: {colours_gt.shape}")
+                    print(f"colours min: {torch.min(colours)}, colours max: {torch.max(colours)}")
+                    print(f"colours_gt min: {torch.min(colours_gt)}, colours_gt max: {torch.max(colours_gt)}")
 
                     # compute colour loss
                     loss = self._colourLoss(colours, colours_gt)
@@ -166,7 +173,7 @@ def test_trainer():
     args = Args()
     trainer = Trainer(args)
     trainer.train()
-    trainer.test()
+    # trainer.test()
 
 if __name__ == '__main__':
     test_trainer()
