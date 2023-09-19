@@ -44,8 +44,8 @@ class Args():
 
         # map (multi-layer hash encoding)
         self.D = 3 # nb of dimensions
-        self.L = 1 #6 # nb of grid layers
-        self.T = 512**3 #2**14 # hash table length
+        self.L = 6 #1 #6 # nb of grid layers
+        self.T = 2**14 # 64**3 #2**14 # hash table length
         self.F = 2 # nb of features, hash table depth
         self.f = 4 # order of frequency encoding       
         self.res_min = 16
@@ -66,3 +66,11 @@ class Args():
         self.plot_nb_I = 30
         self.plot_nb_R = 10
         self.plot_nb_M = 30
+
+
+"""
+Commands
+
+nvidia-smi -l 1
+
+"""
