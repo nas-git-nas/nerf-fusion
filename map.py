@@ -49,9 +49,9 @@ class Map(nn.Module):
             colour: batch of colours from point X and with viewing direction D; torch.tensor (I*R*M, 3)
         """
         # concatenate encoding from every layer
-        X_encoded = torch.empty(X.shape[0], 0).to(self.args.device)
+        X_encoded = torch.empty((X.shape[0], 0), dtype=torch.float32).to(self.args.device)
         for grid in self.grids:
-            X_encoded = torch.cat((X_encoded, grid.forward(X)), dim=1)
+            X_encoded = torch.cat((X_encoded, grid.forward(X).to(dtype=torch.float32)), dim=1)
 
         # density prediction, vector of length 16 where the first element is the density
         density = self.relu(self.density_lin1(X_encoded))
@@ -77,10 +77,10 @@ class Map(nn.Module):
             D_encoded: torch.tensor (I*R*M, 2*f*D)
         """
         # encode direction
-        D_encoded = torch.empty(D.shape[0], 0).to(self.args.device)
+        D_encoded = torch.empty((D.shape[0], 0), dtype=torch.float32).to(self.args.device)
         for i in range(self.args.f):
-            D_encoded = torch.cat((D_encoded, torch.sin(2**i * torch.pi * D)), dim=1)
-            D_encoded = torch.cat((D_encoded, torch.cos(2**i * torch.pi * D)), dim=1)
+            D_encoded = torch.cat((D_encoded, torch.sin(2**i * torch.pi * D).to(dtype=torch.float32)), dim=1)
+            D_encoded = torch.cat((D_encoded, torch.cos(2**i * torch.pi * D).to(dtype=torch.float32)), dim=1)
 
         # extand direction to match positions dimension
         D_encoded = D_encoded.repeat(self.args.M, 1) # (I*R*M, 2*f*D)

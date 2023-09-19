@@ -25,7 +25,7 @@ class Trainer():
         # load map and checkpoint
         self.map = Map(args=args).to(self.args.device)
         if self.args.checkpoint_path is not None:
-            checkpoint = torch.load(self.args.checkpoint_path)
+            checkpoint = torch.load(self.args.checkpoint_path, map_location=self.args.device)
             self.map.load_state_dict(checkpoint['model_state_dict'])
 
         # optimizer
@@ -150,7 +150,7 @@ class Trainer():
         # reshape from batch to nb. of rays times nb. of samples
         density = sample_dens.reshape(-1, self.args.M) # (I*R, M)
         colour = sample_col.reshape(-1, self.args.M, 3) # (I*R, M, 3)
-        points = points.reshape(-1, self.args.M, 3) # (I*R, M, 3)
+        points = points.reshape(-1, self.args.M, 3).to(dtype=torch.float32) # (I*R, M, 3) TODO: convert to float32 earlier
 
         # compute distance between points
         next_points = torch.roll(points, shifts=-1, dims=1) # (I*R, M, 3)
@@ -185,8 +185,8 @@ class Trainer():
 def test_trainer():
     args = Args()
     trainer = Trainer(args)
-    trainer.train()
-    # trainer.test()
+    # trainer.train()
+    trainer.test()
 
 if __name__ == '__main__':
     test_trainer()

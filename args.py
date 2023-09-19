@@ -20,7 +20,7 @@ class Args():
         self.verb_sampling = False
 
         # data
-        ubuntu = True
+        ubuntu = False
         if ubuntu:
             self.data_dir = '/media/scratch1/schmin/data/nerf_synthetic/lego'
         else:
@@ -30,7 +30,7 @@ class Args():
 
         # model
         self.nb_epochs_per_checkpoint = 5
-        self.checkpoint_path = './models/20230918_1645/model.pt'
+        self.checkpoint_path = './models/20230919_0549/model.pt'
         t = datetime.now()
         dir_name = t.strftime("%Y%m%d") + "_" + t.strftime("%H%M")
         self.model_path = os.path.join("models", dir_name)

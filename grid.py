@@ -42,7 +42,7 @@ class Grid(nn.Module):
         # 3-linear interpolation
         hash_vals = self._linearInterpolation(X, hash_vals) # (I*R*M, F)
 
-        return hash_vals
+        return hash_vals # TODO: convert tensors to float32
 
     
     
