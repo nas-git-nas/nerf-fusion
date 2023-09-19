@@ -20,8 +20,7 @@ class Args():
         self.verb_sampling = False
 
         # data
-        ubuntu = False
-        if ubuntu:
+        if self.device == torch.device("cuda:0"):
             self.data_dir = '/media/scratch1/schmin/data/nerf_synthetic/lego'
         else:
             self.data_dir = '../data/nerf_synthetic/lego'
@@ -52,10 +51,10 @@ class Args():
         # training
         self.nb_epochs = 60
         self.lr = 5e-5
-        self.M = 128 # nb of samples per ray
+        self.M = 1024 # nb of samples per ray
         self.R = 4096 # nb of rays per image
-        if ubuntu:
-            self.I = 8 # nb of images per batch
+        if self.device == torch.device("cuda:0"):
+            self.I = 1 # nb of images per batch
         else:
             self.I = 2
         self.N = None # dataset size (total number of images)

@@ -25,7 +25,7 @@ class Trainer():
         # load map and checkpoint
         self.map = Map(args=args).to(self.args.device)
         if self.args.checkpoint_path is not None:
-            checkpoint = torch.load(self.args.checkpoint_path, map_location=self.args.device)
+            checkpoint = torch.load(self.args.checkpoint_path)
             self.map.load_state_dict(checkpoint['model_state_dict'])
 
         # optimizer
@@ -37,6 +37,7 @@ class Trainer():
         # logging
         self.losses_batch = [] # loss per batch
         self.losses_test = [] # loss per test image
+        self.lrs = [] # learning rate per batch
 
         # plotter
         self.plot = Plotter(self.args)
@@ -72,26 +73,32 @@ class Trainer():
                     # compute colour loss
                     loss = self._colourLoss(colours, colours_gt)
                     self.losses_batch.append(loss.item())
+                    self.lrs.append(self.optimizer.param_groups[0]['lr'])
 
                     # backpropagate
                     loss.backward()
                     self.optimizer.step()
-                    self.optimizer.zero_grad()
-
-                    
+                    self.optimizer.zero_grad()                   
 
                     # update progress bar
                     if self.args.verb_training:
                         bar()
 
-            # save model
+            # checkpoint
             if epoch % self.args.nb_epochs_per_checkpoint == 0:
+                # save model
                 torch.save({
                     'epoch': epoch,
                     'model_state_dict': self.map.state_dict(),
                     'optimizer_state_dict': self.optimizer.state_dict(),
                     'loss': self.losses_batch[-1],
                 }, os.path.join(self.args.model_path, "model.pt"))
+
+                # save log
+                self.args.log_df['batch'] = np.arange(len(self.losses_batch))
+                self.args.log_df['loss_train'] = self.losses_batch
+                self.args.log_df['lr'] = self.lrs
+                self.args.log_df.to_csv(os.path.join(self.args.model_path, "log.csv"))
 
             if self.args.verb_training:
                 print(f"Epoch {epoch+1}/{self.args.nb_epochs}, \tloss: {np.mean(self.losses_batch[-self.sampler.nb_batches:]):.4f}, \
@@ -150,7 +157,7 @@ class Trainer():
         # reshape from batch to nb. of rays times nb. of samples
         density = sample_dens.reshape(-1, self.args.M) # (I*R, M)
         colour = sample_col.reshape(-1, self.args.M, 3) # (I*R, M, 3)
-        points = points.reshape(-1, self.args.M, 3).to(dtype=torch.float32) # (I*R, M, 3) TODO: convert to float32 earlier
+        points = points.reshape(-1, self.args.M, 3) # (I*R, M, 3)
 
         # compute distance between points
         next_points = torch.roll(points, shifts=-1, dims=1) # (I*R, M, 3)
@@ -185,8 +192,8 @@ class Trainer():
 def test_trainer():
     args = Args()
     trainer = Trainer(args)
-    # trainer.train()
-    trainer.test()
+    trainer.train()
+    # trainer.test()
 
 if __name__ == '__main__':
     test_trainer()
