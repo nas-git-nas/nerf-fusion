@@ -54,7 +54,6 @@ class Map(nn.Module):
             X_encoded = torch.cat((X_encoded, grid.forward(X)), dim=1)
 
         # density prediction, vector of length 16 where the first element is the density
-        print(X_encoded.shape)
         density = self.relu(self.density_lin1(X_encoded))
         density = self.sigmoid(self.density_lin2(density))
 

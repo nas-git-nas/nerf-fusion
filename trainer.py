@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import time
+import os
 from alive_progress import alive_bar
 
 from args import Args
@@ -18,9 +19,14 @@ class Trainer():
     def __init__(self, args:Args) -> None:
         self.args = args
 
-        self.map = Map(args=args).to(self.args.device)
         self.data_loader = DataLoader(self.args)
         self.sampler = Sampler(self.args)
+
+        # load map and checkpoint
+        self.map = Map(args=args).to(self.args.device)
+        if self.args.checkpoint_path is not None:
+            checkpoint = torch.load(self.args.checkpoint_path)
+            self.map.load_state_dict(checkpoint['model_state_dict'])
 
         # optimizer
         # for name, param in self.map.named_parameters():
@@ -39,8 +45,8 @@ class Trainer():
 
         # load data and move it to current device
         imgs, rays = self.data_loader.loadData(splits=["train"])
-        imgs = torch.tensor(imgs["train"]).to(self.args.device)
-        rays = torch.tensor(rays["train"]).to(self.args.device)
+        imgs = torch.tensor(imgs["train"], dtype=torch.float32).to(self.args.device)
+        rays = torch.tensor(rays["train"], dtype=torch.float32).to(self.args.device)
 
         if self.args.verb_training:
             print(f'Start training \t--- \tnb. epochs: {self.args.nb_epochs}, \
@@ -63,10 +69,6 @@ class Trainer():
                     # estimate colour from sample densities and sample colours
                     colours = self._colourEstimation(sample_dens, sample_col, points) # (I*R, 3)
 
-                    print(f"colours: {colours.shape}, colours_gt: {colours_gt.shape}")
-                    print(f"colours min: {torch.min(colours)}, colours max: {torch.max(colours)}")
-                    print(f"colours_gt min: {torch.min(colours_gt)}, colours_gt max: {torch.max(colours_gt)}")
-
                     # compute colour loss
                     loss = self._colourLoss(colours, colours_gt)
                     self.losses_batch.append(loss.item())
@@ -76,9 +78,20 @@ class Trainer():
                     self.optimizer.step()
                     self.optimizer.zero_grad()
 
-                
+                    
+
+                    # update progress bar
                     if self.args.verb_training:
                         bar()
+
+            # save model
+            if epoch % self.args.nb_epochs_per_checkpoint == 0:
+                torch.save({
+                    'epoch': epoch,
+                    'model_state_dict': self.map.state_dict(),
+                    'optimizer_state_dict': self.optimizer.state_dict(),
+                    'loss': self.losses_batch[-1],
+                }, os.path.join(self.args.model_path, "model.pt"))
 
             if self.args.verb_training:
                 print(f"Epoch {epoch+1}/{self.args.nb_epochs}, \tloss: {np.mean(self.losses_batch[-self.sampler.nb_batches:]):.4f}, \

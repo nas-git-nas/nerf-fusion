@@ -43,7 +43,6 @@ class DataLoader():
 
         # convert rays such that all poses are in the cube [-1,1]**3
         rays = self._scaleCoords(rays)
-        print(f"Rays max: {rays[:,0,:,:,:].max()}, Rays min: {rays[:,0,:,:,:].min()}")
 
         # split data into train, val, test
         imgs_dict = { s:imgs[i_split[s]] for s in splits}
