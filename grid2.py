@@ -52,7 +52,9 @@ class Grid2(nn.Module):
             cube_indices: int torch.tensor of shape (I*R*M, 2**D, D)
         """
         if self.args.debug:
-            assert X.shape[1]==self.args.D, "X must have D dimensions"
+            if not X.shape[1]==self.args.D:
+                print(f"ERROR: grid._getCubeIdxs: X must have D dimensions; X shape: {X.shape}, D: {self.args.D}")
+            # assert X.shape[1]==self.args.D, "X must have D dimensions"
 
         # get grid indices
         X_scaled = self._convertPos2Index(X)
@@ -83,9 +85,15 @@ class Grid2(nn.Module):
             hash_vals: interpolated hash values, tensor (I*R*M, F)
         """
         if self.args.debug:
-            assert hash_vals.shape[0]==X.shape[0], "hash_vals and X must have same number of points"
-            assert hash_vals.shape[1]==np.power(2, self.args.D), "hash_vals must have 2**D values"
-            assert hash_vals.shape[2]==self.args.F, "hash_vals must have F features"
+            if not hash_vals.shape[0]==X.shape[0]:
+                print("ERROR: grid._linearInterpolation: hash_vals and X must have same number of points")
+            if not hash_vals.shape[1]==np.power(2, self.args.D):
+                print("ERROR: grid._linearInterpolation: hash_vals must have 2**D values")
+            if not hash_vals.shape[2]==self.args.F:
+                print("ERROR: grid._linearInterpolation: hash_vals must have F features")
+            # assert hash_vals.shape[0]==X.shape[0], "hash_vals and X must have same number of points"
+            # assert hash_vals.shape[1]==np.power(2, self.args.D), "hash_vals must have 2**D values"
+            # assert hash_vals.shape[2]==self.args.F, "hash_vals must have F features"
 
         # get interpolation weights
         X_scaled = self._convertPos2Index(X)
@@ -120,7 +128,9 @@ class Grid2(nn.Module):
             X_scaled: torch.tensor of shape (I*R*M, D)
         """
         if self.args.debug:
-            assert (X<=1.00001).all() and (X>=-1.00001).all(), f"X must be in [-1,1], min: {torch.min(X)}, max: {torch.max(X)}"
+            if not (X<=1.00001).all() and (X>=-1.00001).all():
+                print(f"ERROR: grid._convertPos2Index: X must be in [-1,1], min: {torch.min(X)}, max: {torch.max(X)}")
+            # assert (X<=1.00001).all() and (X>=-1.00001).all(), f"X must be in [-1,1], min: {torch.min(X)}, max: {torch.max(X)}"
 
         # get grid indices
         X_scaled = (X + 1) / 2 # scale from [-1,1] to [0,1]
@@ -128,53 +138,3 @@ class Grid2(nn.Module):
 
         return X_scaled
 
-
-
-def test_getCubeIdxs():
-    args = Args()
-    grid = Grid(args, layer=0)
-
-    X = torch.tensor([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]]).to(args.device)
-    cube_idxs = grid._getCubeIdxs(X)
-    print(f"Resolution: {grid.res}")
-    print(f"X: {X}")
-    print(f"X scaled: {X*(grid.res-1)}")
-    print(f"cube_idxs: {cube_idxs}")
-
-def test_hashFunction():
-    args = Args()
-    grid = Grid(args, layer=0)
-
-    X = torch.rand(1024,3).to(args.device)
-    hash_idxs = grid._hashFunction(X)
-    
-    print(f"hash indices: {hash_idxs}")
-
-def test_linearInterpolation():
-    args = Args()
-    grid = Grid(args, layer=0)
-
-    X = torch.tensor([[0.1, 0.2, 0.3]]).to(args.device)
-    cube_idxs = grid._getCubeIdxs(X)
-    hash_vals_before = torch.concat((cube_idxs[:,:,1].reshape(X.shape[0], 2**args.D, 1), cube_idxs[:,:,2].reshape(X.shape[0], 2**args.D, 1)), dim=2)
-    hash_vals = grid._linearInterpolation(X, hash_vals=hash_vals_before.to(args.device))
-    
-    print(f"cube indices: {cube_idxs}")
-    print(f"hash values before: {hash_vals_before}")
-    print(f"interpolated values: {hash_vals}")
-
-def test_forward():
-    args = Args()
-    grid = Grid(args, layer=0)
-
-    X = torch.tensor([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]]).to(args.device)
-    hash_vals = grid(X)
-    
-    print(f"hash values: {hash_vals}")
-
-
-if __name__ == '__main__':
-    # test_getCubeIdxs()
-    # test_hashFunction()
-    test_linearInterpolation()
-    # test_forward()
