@@ -6,6 +6,7 @@ from torch import nn
 
 from args import Args
 from grid import Grid
+from grid2 import Grid2
 
 class Map(nn.Module):
     def __init__(self, args:Args) -> None:
@@ -16,8 +17,9 @@ class Map(nn.Module):
         
         # create learnable girds
         self.grids = []
-        for i in range(self.args.L):
-            self.grids.append(Grid(args=self.args, layer=i))
+        # for i in range(self.args.L):
+        #     self.grids.append(Grid(args=self.args, layer=i))
+        self.grids.append(Grid2(args=self.args, layer=0))
 
         # Register parameters of the Grid instance as parameters of the Map instance
         for i, grid in enumerate(self.grids):

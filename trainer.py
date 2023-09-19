@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import time
 import os
+import pandas as pd
 from alive_progress import alive_bar
 
 from args import Args
@@ -95,10 +96,11 @@ class Trainer():
                 }, os.path.join(self.args.model_path, "model.pt"))
 
                 # save log
-                self.args.log_df['batch'] = np.arange(len(self.losses_batch))
-                self.args.log_df['loss_train'] = self.losses_batch
-                self.args.log_df['lr'] = self.lrs
-                self.args.log_df.to_csv(os.path.join(self.args.model_path, "log.csv"))
+                log_df = pd.DataFrame(columns=['batch', 'loss_batch', 'lr'])
+                log_df['batch'] = np.arange(len(self.losses_batch))
+                log_df['loss_train'] = self.losses_batch
+                log_df['lr'] = self.lrs
+                log_df.to_csv(os.path.join(self.args.model_path, "log.csv"))
 
             if self.args.verb_training:
                 print(f"Epoch {epoch+1}/{self.args.nb_epochs}, \tloss: {np.mean(self.losses_batch[-self.sampler.nb_batches:]):.4f}, \

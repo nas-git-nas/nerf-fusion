@@ -1,6 +1,7 @@
 import torch
 import os
 import shutil
+import pandas as pd
 
 from datetime import datetime
 
@@ -28,8 +29,8 @@ class Args():
         self.load_nb_imgs = {"train": 100, "test": 2, "val": 0}
 
         # model
-        self.nb_epochs_per_checkpoint = 5
-        self.checkpoint_path = './models/20230919_0549/model.pt'
+        self.nb_epochs_per_checkpoint = 2
+        self.checkpoint_path = None #'./models/20230919_0549/model.pt'
         t = datetime.now()
         dir_name = t.strftime("%Y%m%d") + "_" + t.strftime("%H%M")
         self.model_path = os.path.join("models", dir_name)
@@ -38,11 +39,13 @@ class Args():
         os.mkdir(self.model_path)
 
         # logging
+        self.log_df = pd.DataFrame(columns=['batch', 'loss_batch', 'lr'])
+        self.log_df.to_csv(os.path.join(self.model_path, "log.csv"), index=False)
 
         # map (multi-layer hash encoding)
         self.D = 3 # nb of dimensions
-        self.L = 6 # nb of grid layers
-        self.T = 2**14 # hash table length
+        self.L = 1 #6 # nb of grid layers
+        self.T = 512**3 #2**14 # hash table length
         self.F = 2 # nb of features, hash table depth
         self.f = 4 # order of frequency encoding       
         self.res_min = 16
@@ -51,10 +54,10 @@ class Args():
         # training
         self.nb_epochs = 60
         self.lr = 5e-5
-        self.M = 1024 # nb of samples per ray
+        self.M = 256 # nb of samples per ray
         self.R = 4096 # nb of rays per image
         if self.device == torch.device("cuda:0"):
-            self.I = 1 # nb of images per batch
+            self.I = 2 # nb of images per batch
         else:
             self.I = 2
         self.N = None # dataset size (total number of images)
