@@ -43,7 +43,11 @@ class Sampler():
 
             # sample rays, points and colours
             ray_coord = self._sampleRays(img_batch) # (I*R, 3)
-            points, directions = self._samplePoints(ray_batch, ray_coord) # (I*R*M, 3), (I*R, 3)
+
+            # points, directions = self._samplePoints(ray_batch, ray_coord) # (I*R*M, 3), (I*R, 3)
+            points, directions = self._samplePointsExp(ray_batch, ray_coord, imgs) # (I*R*M, 3), (I*R, 3)
+
+
             colours_gt = self._sampleColours(img_batch, ray_coord) # (I*R, 4)
 
             # create data batch
@@ -118,6 +122,39 @@ class Sampler():
         # sample points on rays     
         points = np.linspace(ray_origins.detach().cpu().numpy(), ray_max.detach().cpu().numpy(), self.args.M) # (M, I*R, 3)
         points = np.transpose(points, (1, 0, 2)).reshape(ray_coord.shape[0]*self.args.M, 3) # (I*R*M, 3)
+        points = torch.tensor(points).to(self.args.device)
+
+        return points, ray_directions
+    
+    def _samplePointsExp(self, ray_batch, ray_coord, imgs):
+        """
+        Sample points from ray batch exponentially around image depth.
+        Args:
+            ray_batch: batch of rays; torch.tensor (I, ro+rd, H, W, 3)
+            ray_coord: sampled ray coordinates [img. index, height coord., width coord.]; np.array (I*R, 3)
+            imgs: images; torch.tensor (I, H, W, 4)
+        Returns:
+            points: sampled position on ray; torch.tensor (I*R*M, 3)
+            directions: sample dirction of rays; torch.tensor (I*R, 3)
+        """
+        # extract ray origins and directions
+        ray_origins = ray_batch[ray_coord[:,0], 0, ray_coord[:,1], ray_coord[:,2], :] # (I*R, 3)
+        ray_directions = ray_batch[ray_coord[:,0], 1, ray_coord[:,1], ray_coord[:,2], :] # (I*R, 3)
+
+        # calculate max. step that one can take on ray while keeping inside of [-1,1]**3
+        ray_sign = torch.sign(ray_directions) # (I*R, 3), mirror problem if direction is negative
+        t_max = torch.min( (1 - ray_sign*ray_origins) / (ray_sign*ray_directions), dim=1)[0] # (I*R,)
+
+        # sample depths of ray
+        depths = imgs[ray_coord[:,0], ray_coord[:,1], ray_coord[:,2], 3] # (I*R,)
+        depths = np.repeat(depths.reshape(-1,1), self.args.M, axis=1) # (I*R, M)
+        depths = self.rng.normal(loc=depths, scale=0.1, size=(ray_coord.shape[0], self.args.M)) # (I*R, M)
+        depths = np.clip(depths, a_min=0, a_max=np.repeat(t_max.reshape(-1,1), self.args.M, axis=1)) # (I*R, M)
+        depths = np.sort(depths, axis=1) # (I*R, M)
+        depths = depths.flatten() # (I*R*M,)
+
+        # calc. position of sampled points
+        points = np.repeat(ray_origins, self.args.M, axis=0) + depths[:,None] * np.repeat(ray_directions, self.args.M, axis=0) # (I*R*M, 3)
         points = torch.tensor(points).to(self.args.device)
 
         return points, ray_directions
