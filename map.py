@@ -2,6 +2,7 @@ import torch
 import numpy as np
 
 from torch import nn
+from activation import trunc_exp
 
 
 from args import Args
@@ -50,10 +51,10 @@ class Map(nn.Module):
             colour: batch of colours from point X and with viewing direction D; torch.tensor (I*R*M, 3)
         """
         # estimate density
-        density = self.forwardDensity(X) # (I*R*M, 16) 0th element of 2. dimension is density
+        density, geo_features = self.forwardDensity(X) # (I*R*M,), (I*R*M, 15)
 
         # estimate colour
-        colour = self.forwardColour(density, D) # (I*R*M, 3)
+        colour = self.forwardColour(geo_features, D) # (I*R*M, 3)
 
         return density[:,0], colour
     
@@ -63,31 +64,33 @@ class Map(nn.Module):
         Args:
             X: batch of points; torch.tensor (I*R*M, D)
         Returns:
-            density: batch of densities from point X (0th element of 2. dim. is density); torch.tensor (I*R*M, 16)
+            density: batch of densities from point X; torch.tensor (I*R*M,)
+            geo_features: batch of geo_features from point X; torch.tensor (I*R*M, 15)
         """
         # concatenate encoding from every layer
-        X_encoded = torch.empty((X.shape[0], 0), dtype=torch.float32).to(self.args.device)
-        for grid in self.grids:
-            X_encoded = torch.cat((X_encoded, grid.forward(X).to(dtype=torch.float32)), dim=1)
+        X_encoded = self._encodePosition(X) # (I*R*M, L*F)
 
         # density prediction, vector of length 16 where the first element is the density
-        density = self.relu(self.density_lin1(X_encoded))
-        density = self.sigmoid(self.density_lin2(density))
+        X_encoded = self.relu(self.density_lin1(X_encoded))
+        X_encoded = self.sigmoid(self.density_lin2(X_encoded))
 
-        return density
+        density = trunc_exp(X_encoded[:,0]) # (I*R*M,)
+        geo_features = X_encoded[:,1:] # (I*R*M, 15)
+
+        return density, geo_features
     
-    def forwardColour(self, density, D):
+    def forwardColour(self, geo_features, D):
         """
         Forward pass of the map
         Args:
-            density: batch of densities from point X; torch.tensor (I*R*M, 16)
+            geo_features: batch of geometric features from point X; torch.tensor (I*R*M, 15)
             D: batch of directions, normalized vectors indicating direction of view; torch.tensor (I*R, D)
         Returns:
             colour: batch of colours from point X and with viewing direction D; torch.tensor (I*R*M, 3)
         """
         # encode direction
         D_encoded = self._encodeDirection(D) # (I*R*M, 2*f*D)
-        D_encoded = torch.cat((density, D_encoded), dim=1)
+        D_encoded = torch.cat((geo_features, D_encoded), dim=1)
 
         # colour prediction
         colour = self.relu(self.colour_lin1(D_encoded))
@@ -95,6 +98,21 @@ class Map(nn.Module):
         colour = self.sigmoid(self.colour_lin3(colour))
 
         return colour
+    
+    def _encodePosition(self, X):
+        """
+        Encode position vector X
+        Args:
+            X: batch of points; torch.tensor (I*R*M, D)
+        Returns:
+            X_encoded: torch.tensor (I*R*M, L*F)
+        """
+        # concatenate encoding from every layer
+        X_encoded = torch.empty((X.shape[0], 0), dtype=torch.float32).to(self.args.device)
+        for grid in self.grids:
+            X_encoded = torch.cat((X_encoded, grid.forward(X).to(dtype=torch.float32)), dim=1)
+
+        return X_encoded
 
     def _encodeDirection(self, D):
         """

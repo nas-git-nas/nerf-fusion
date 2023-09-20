@@ -149,6 +149,7 @@ class Sampler():
         # calculate max. step that one can take on ray while keeping inside of [-1,1]**3
         ray_sign = torch.sign(ray_directions) # (I*R, 3), mirror problem if direction is negative
         t_max = torch.min( (1 - ray_sign*ray_origins) / (ray_sign*ray_directions), dim=1)[0] # (I*R,)
+        t_max = t_max.to("cpu").detach().numpy() # (I*R,)
 
         # calc. step that leads to closest point to origin
         t_closest = -torch.sum(ray_origins * ray_directions, axis=1) / torch.sum(ray_directions**2, axis=1) # (I*R,)

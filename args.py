@@ -45,7 +45,7 @@ class Args():
         # map (multi-layer hash encoding)
         self.D = 3 # nb of dimensions
         self.L = 1 #6 # nb of grid layers
-        self.T = 64**3 #2**14 # hash table length
+        self.T = 128**3 #2**14 # hash table length
         self.F = 2 # nb of features, hash table depth
         self.f = 4 # order of frequency encoding       
         self.res_min = 16
@@ -56,12 +56,12 @@ class Args():
         self.occ_nb_samples = 128**3 # nb. of samples to update occupancy grid 
 
         # training
-        self.nb_epochs = 60
+        self.nb_epochs = 100
         self.lr = 5e-5
         self.M = 32 #256 # nb of samples per ray
         self.R = 2**14 #4096 # nb of rays per image
         if self.device == torch.device("cuda:0"):
-            self.I = 2 # nb of images per batch
+            self.I = 4 # nb of images per batch
         else:
             self.I = 2
         self.N = None # dataset size (total number of images)

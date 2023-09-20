@@ -14,8 +14,6 @@ from plotter import Plotter
 
 
 
-
-
 class Trainer():
     def __init__(self, args:Args) -> None:
         self.args = args
@@ -91,6 +89,11 @@ class Trainer():
                     # update progress bar
                     if self.args.verb_training:
                         bar()
+
+            # change learning rate, TODO: use scheduler
+            if epoch == 9:
+                for g in self.optimizer.param_groups:
+                    g['lr'] = 1e-5
 
             # checkpoint
             if epoch % self.args.nb_epochs_per_checkpoint == 0:
