@@ -5,8 +5,7 @@ from torch import nn
 
 
 from args import Args
-from grid import Grid
-from grid2 import Grid2
+from grid import GridHash, GridTable
 
 class Map(nn.Module):
     def __init__(self, args:Args) -> None:
@@ -17,9 +16,9 @@ class Map(nn.Module):
         
         # create learnable girds
         self.grids = []
-        # for i in range(self.args.L):
-        #     self.grids.append(Grid(args=self.args, layer=i))
-        self.grids.append(Grid2(args=self.args, layer=0))
+        for i in range(self.args.L):
+            # self.grids.append(GridHash(args=self.args, layer=i))
+            self.grids.append(GridTable(args=self.args, layer=0))
 
         # Register parameters of the Grid instance as parameters of the Map instance
         for i, grid in enumerate(self.grids):
@@ -50,6 +49,22 @@ class Map(nn.Module):
             density: batch of densities from point X; torch.tensor (I*R*M,)
             colour: batch of colours from point X and with viewing direction D; torch.tensor (I*R*M, 3)
         """
+        # estimate density
+        density = self.forwardDensity(X) # (I*R*M, 16) 0th element of 2. dimension is density
+
+        # estimate colour
+        colour = self.forwardColour(density, D) # (I*R*M, 3)
+
+        return density[:,0], colour
+    
+    def forwardDensity(self, X):
+        """
+        Forward pass to get the density
+        Args:
+            X: batch of points; torch.tensor (I*R*M, D)
+        Returns:
+            density: batch of densities from point X (0th element of 2. dim. is density); torch.tensor (I*R*M, 16)
+        """
         # concatenate encoding from every layer
         X_encoded = torch.empty((X.shape[0], 0), dtype=torch.float32).to(self.args.device)
         for grid in self.grids:
@@ -59,6 +74,17 @@ class Map(nn.Module):
         density = self.relu(self.density_lin1(X_encoded))
         density = self.sigmoid(self.density_lin2(density))
 
+        return density
+    
+    def forwardColour(self, density, D):
+        """
+        Forward pass of the map
+        Args:
+            density: batch of densities from point X; torch.tensor (I*R*M, 16)
+            D: batch of directions, normalized vectors indicating direction of view; torch.tensor (I*R, D)
+        Returns:
+            colour: batch of colours from point X and with viewing direction D; torch.tensor (I*R*M, 3)
+        """
         # encode direction
         D_encoded = self._encodeDirection(D) # (I*R*M, 2*f*D)
         D_encoded = torch.cat((density, D_encoded), dim=1)
@@ -68,7 +94,7 @@ class Map(nn.Module):
         colour = self.relu(self.colour_lin2(colour))
         colour = self.sigmoid(self.colour_lin3(colour))
 
-        return density[:,0], colour      
+        return colour
 
     def _encodeDirection(self, D):
         """

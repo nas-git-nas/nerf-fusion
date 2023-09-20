@@ -64,6 +64,9 @@ class Plotter():
         self.ax.set_zlabel('Z')
         self.ax.set_title('Camera Poses Visualization')
         self.ax.set_aspect('equal', 'box')
+        self.ax.set_xlim(-1, 1)
+        self.ax.set_ylim(-1, 1)
+        self.ax.set_zlim(-1, 1)
         
         #ax.legend()
         plt.show()
@@ -72,12 +75,12 @@ class Plotter():
         """
         Visualize camera positions and viewing directions.
         Returns:
-            rays: rays; dict of numpy array of shape (N, ro+rd, H, W, 3)
+            rays: rays; numpy array of shape (N, ro+rd, H, W, 3)
         """
         # Extract positions and viewing directions from the input numpy array
-        H = rays["test"].shape[2]
-        W = rays["test"].shape[3]
-        positions = rays["test"][:,0,H//2,W//2,:]
+        H = rays.shape[2]
+        W = rays.shape[3]
+        positions = rays[:,0,H//2,W//2,:]
 
         # create figure if not already done
         self._createFigure()
@@ -105,13 +108,13 @@ class Plotter():
         """
         Visualize camera positions and viewing directions.
         Returns:
-            rays: rays; dict of numpy array of shape (N, ro+rd, H, W, 3)
+            rays: rays; numpy array of shape (N, ro+rd, H, W, 3)
         """
         # Extract positions and viewing directions from the input numpy array
-        H = rays["test"].shape[2]
-        W = rays["test"].shape[3]
-        positions = rays["test"][:,0,H//2,W//2,:]
-        view_directions = rays["test"][:,1,H//2,W//2,:]
+        H = rays.shape[2]
+        W = rays.shape[3]
+        positions = rays[:,0,H//2,W//2,:]
+        view_directions = rays[:,1,H//2,W//2,:]
 
         # create figure if not already done
         self._createFigure()
@@ -123,30 +126,32 @@ class Plotter():
         step_I, _, _ = self._representationStep(nb_images=positions.shape[0])
 
         # plot field of view of camera
-        all_corners = np.array([rays["test"][:,0,0,0,:], rays["test"][:,0,H-1,0,:], 
-                                rays["test"][:,0,H-1,W-1,:], rays["test"][:,0,0,W-1,:]]) # (4, N, 3)
+        all_corners = np.array([rays[:,0,0,0,:], rays[:,0,H-1,0,:], 
+                                rays[:,0,H-1,W-1,:], rays[:,0,0,W-1,:]]) # (4, N, 3)
         all_corners = all_corners.transpose(1, 0, 2) # (N, 4, 3)
-        all_rays = np.array([rays["test"][:,1,0,0,:], rays["test"][:,1,H-1,0,:], 
-                             rays["test"][:,1,H-1,W-1,:], rays["test"][:,1,0,W-1,:]]) # (4, N, 3)
+        all_rays = np.array([rays[:,1,0,0,:], rays[:,1,H-1,0,:], 
+                             rays[:,1,H-1,W-1,:], rays[:,1,0,W-1,:]]) # (4, N, 3)
         all_rays = all_rays.transpose(1, 0, 2) # (N, 4, 3)
         for i in range(0, all_corners.shape[0], step_I):
             fov_polygon = self._createFoVpolygon(all_corners[i], all_rays[i])
             color = self.colourMap["cmap"](self.colourMap["norm"](i))
             self.ax.add_collection3d(Poly3DCollection(fov_polygon, alpha=0.18, edgecolor=color, facecolor=color))
 
-    def cameraRays(self, positions, directions, rays):
+    def cameraRays(self, positions, directions, rays, colours_gt):
         """
         Visualize sampled rays.
         Args:
             positions: sampled positions; np.array (I*R*M, 3)
             directions: sampled directions; np.array (I*R, 3)
-            ax: matplotlib axis
+            rays: rays; numpy array of shape (I, ro+rd, H, W, 3)
+            colours_gt: colours; numpy array of shape (I*R, 4)
         """
         positions = positions.reshape(self.args.I, self.args.R, self.args.M, 3)
         directions = directions.reshape(self.args.I, self.args.R, 3)
-        H = rays["test"].shape[2]
-        W = rays["test"].shape[3]
-        c_positions = rays["test"][:,0,H//2,W//2,:]
+        colours_gt = colours_gt.reshape(self.args.I, self.args.R, 4)
+        H = rays.shape[2]
+        W = rays.shape[3]
+        c_positions = rays[:,0,H//2,W//2,:] # (I, 3)
 
         # create figure if not already done
         self._createFigure()
@@ -157,6 +162,13 @@ class Plotter():
         # calculate step size
         step_I, step_R, step_M = self._representationStep(nb_images=positions.shape[0])
 
+        # calculate max. step that one can take on ray while keeping inside of [-1,1]**3
+        ray_origins = np.repeat(c_positions, self.args.R, axis=0) # (I*R, 3)
+        ray_directions = directions.reshape(-1, 3) # (I*R, 3)
+        ray_sign = np.sign(ray_directions) # (I*R, 3), mirror problem if direction is negative
+        t_max = np.min( (1 - ray_sign*ray_origins) / (ray_sign*ray_directions), axis=1) # (I*R,)
+        t_max = t_max.reshape(self.args.I, self.args.R) # (I, R)
+
         # Plot camera positions as dots with color gradient
         for i in range(0, positions.shape[0], step_I):
             # determine colour
@@ -164,8 +176,9 @@ class Plotter():
 
             for j in range(0, positions.shape[1], step_R):
                 # determine length of ray
-                direction_scale = np.linalg.norm( positions[i,j,:,:] - c_positions[i].reshape(1,3), axis=1 )
-                direction_scale = np.max(direction_scale)
+                # direction_scale = np.linalg.norm( positions[i,j,:,:] - c_positions[i].reshape(1,3), axis=1 )
+                # direction_scale = np.max(direction_scale)
+                direction_scale = t_max[i,j]
 
                 # plot all sample rays
                 start = c_positions[i]

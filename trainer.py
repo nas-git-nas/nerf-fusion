@@ -74,12 +74,19 @@ class Trainer():
                     # compute colour loss
                     loss = self._colourLoss(colours, colours_gt)
                     self.losses_batch.append(loss.item())
-                    self.lrs.append(self.optimizer.param_groups[0]['lr'])
+                    self.lrs.append(self.optimizer.param_groups[0]['lr'])                   
 
                     # backpropagate
                     loss.backward()
+
+                    # for name, param in self.map.named_parameters():
+                    #     if param.requires_grad:
+                    #         # print(f"Name: {name}, param: {param.data}")
+                    #         print(f"Name: {name}, numel: {torch.numel(param.grad)}, non-zero: {torch.numel(param.grad) - torch.sum(torch.isclose(param.grad, torch.zeros_like(param.grad)))}")
+                    #         print(f"grad: {param.grad}")
+
                     self.optimizer.step()
-                    self.optimizer.zero_grad()                   
+                    self.optimizer.zero_grad()      
 
                     # update progress bar
                     if self.args.verb_training:
@@ -159,7 +166,7 @@ class Trainer():
         # reshape from batch to nb. of rays times nb. of samples
         density = sample_dens.reshape(-1, self.args.M) # (I*R, M)
         colour = sample_col.reshape(-1, self.args.M, 3) # (I*R, M, 3)
-        points = points.reshape(-1, self.args.M, 3) # (I*R, M, 3)
+        points = points.reshape(-1, self.args.M, 3).to(dtype=torch.float32) # (I*R, M, 3), TODO: convert earlier to float32
 
         # compute distance between points
         next_points = torch.roll(points, shifts=-1, dims=1) # (I*R, M, 3)

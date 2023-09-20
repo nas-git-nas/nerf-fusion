@@ -219,16 +219,14 @@ class DataLoader():
         return rays_o, rays_d
     
 
-    def _scaleCoords(self, rays, imgs):
+    def _scaleCoords(self, rays):
         """
-        Scale rays and images such that all positions are in the cube [-1,1]**3
+        Scale rays such that all positions are in the cube [-1,1]**3
         and all directions are normalized.
         Args:
             rays: rays; np.array (N, ro+rd, H, W, 3)
-            imgs: images; np.array (N, H, W, 4)
         Returns:
             rays_scaled: scaled rays; np.array (N, ro+rd, H, W, 3)
-            imgs: scaled images; np.array (N, H, W, 4)
         """
         rays_scaled = np.empty(rays.shape)
 
@@ -236,15 +234,17 @@ class DataLoader():
         ro_max = rays[:,0,:,:,:].max()
         ro_min = rays[:,0,:,:,:].min()
         rays_scaled[:,0,:,:,:] = ((rays[:,0,:,:,:] - ro_min) / (ro_max - ro_min)) * 2 - 1
-        rays_scaled[:,0,:,:,:] = np.clip(rays_scaled[:,0,:,:,:], a_min=-1, a_max=1)
 
-        # scale imgs depth
-        imgs[:,:,:,3] = (imgs[:,:,:,3] / (ro_max - ro_min)) * 2
+        # clip positions to account for numerical errors
+        if self.args.debug:
+            if not ((rays_scaled[:,0,:,:,:].max()-1<0.000001) and (rays_scaled[:,0,:,:,:].min()+1>-0.000001)):
+                print(f"ERROR: dataloader._scaleCoords: positions are out of bounds [-1,1], max: {rays_scaled[:,0,:,:,:].max()}, min: {rays_scaled[:,0,:,:,:].min()}")
+        rays_scaled[:,0,:,:,:] = np.clip(rays_scaled[:,0,:,:,:], a_min=-1, a_max=1)
 
         # normalize directions
         rays_scaled[:,1,:,:,:] = rays[:,1,:,:,:] / np.linalg.norm(rays[:,1,:,:,:], axis=-1).reshape(rays.shape[0],rays.shape[2],rays.shape[3],1)
 
-        return rays_scaled, imgs
+        return rays_scaled
 
 
 

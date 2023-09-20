@@ -27,6 +27,12 @@ class Sampler():
         # calculate nb. batches
         self.nb_batches = imgs.shape[0] // self.args.I
 
+        # clip positions to account for numerical errors
+        if self.args.debug:
+            if not ((torch.max(rays[:,0,:,:,:])-1<0.000001) and (torch.min(rays[:,0,:,:,:])+1>-0.000001)):
+                print(f"ERROR: dataloader._scaleCoords: positions are out of bounds [-1,1], max: {torch.max(rays[:,0,:,:,:])}, min: {torch.min(rays[:,0,:,:,:])}")
+        rays[:,0,:,:,:] = torch.clamp(rays[:,0,:,:,:], min=-1, max=1)
+
         if self.args.verb_sampling:
             print(f"Start iterating data: nb. batches: {self.nb_batches}")
 
@@ -45,7 +51,7 @@ class Sampler():
             ray_coord = self._sampleRays(img_batch) # (I*R, 3)
 
             # points, directions = self._samplePoints(ray_batch, ray_coord) # (I*R*M, 3), (I*R, 3)
-            points, directions = self._samplePointsExp(ray_batch, ray_coord, imgs) # (I*R*M, 3), (I*R, 3)
+            points, directions = self._samplePointsExp(ray_batch, ray_coord) # (I*R*M, 3), (I*R, 3)
 
 
             colours_gt = self._sampleColours(img_batch, ray_coord) # (I*R, 4)
@@ -126,13 +132,12 @@ class Sampler():
 
         return points, ray_directions
     
-    def _samplePointsExp(self, ray_batch, ray_coord, imgs):
+    def _samplePointsExp(self, ray_batch, ray_coord):
         """
         Sample points from ray batch exponentially around image depth.
         Args:
             ray_batch: batch of rays; torch.tensor (I, ro+rd, H, W, 3)
             ray_coord: sampled ray coordinates [img. index, height coord., width coord.]; np.array (I*R, 3)
-            imgs: images; torch.tensor (I, H, W, 4)
         Returns:
             points: sampled position on ray; torch.tensor (I*R*M, 3)
             directions: sample dirction of rays; torch.tensor (I*R, 3)
@@ -145,17 +150,21 @@ class Sampler():
         ray_sign = torch.sign(ray_directions) # (I*R, 3), mirror problem if direction is negative
         t_max = torch.min( (1 - ray_sign*ray_origins) / (ray_sign*ray_directions), dim=1)[0] # (I*R,)
 
+        # calc. step that leads to closest point to origin
+        t_closest = -torch.sum(ray_origins * ray_directions, axis=1) / torch.sum(ray_directions**2, axis=1) # (I*R,)
+        t_closest = t_closest.to("cpu").detach().numpy() # (I*R,)
+        t_closest = np.clip(t_closest, a_min=0, a_max=t_max) # (I*R,)
+
         # sample depths of ray
-        depths = imgs[ray_coord[:,0], ray_coord[:,1], ray_coord[:,2], 3] # (I*R,)
-        depths = np.repeat(depths.reshape(-1,1), self.args.M, axis=1) # (I*R, M)
-        depths = self.rng.normal(loc=depths, scale=0.1, size=(ray_coord.shape[0], self.args.M)) # (I*R, M)
+        depths = np.repeat(t_closest.reshape(-1,1), self.args.M, axis=1) # (I*R, M)
+        depths = self.rng.normal(loc=depths, scale=0.4, size=(ray_coord.shape[0], self.args.M)) # (I*R, M)
         depths = np.clip(depths, a_min=0, a_max=np.repeat(t_max.reshape(-1,1), self.args.M, axis=1)) # (I*R, M)
         depths = np.sort(depths, axis=1) # (I*R, M)
-        depths = depths.flatten() # (I*R*M,)
+        depths = torch.tensor(depths.flatten()).to(self.args.device) # (I*R*M,)
 
         # calc. position of sampled points
-        points = np.repeat(ray_origins, self.args.M, axis=0) + depths[:,None] * np.repeat(ray_directions, self.args.M, axis=0) # (I*R*M, 3)
-        points = torch.tensor(points).to(self.args.device)
+        points = torch.repeat_interleave(ray_origins, self.args.M, dim=0) \
+                 + depths[:,None] * torch.repeat_interleave(ray_directions, self.args.M, dim=0) # (I*R*M, 3)
 
         return points, ray_directions
 
@@ -209,23 +218,20 @@ def test_iterData():
     sampler = Sampler(args=args)
 
     # load data and move it to current device
-    imgs, rays = dl.loadData()
-    imgs = {split: torch.tensor(data).to(args.device) for split, data in imgs.items()}
-    rays = {split: torch.tensor(data).to(args.device) for split, data in rays.items()}
+    imgs, rays = dl.loadData(splits=["train"])
+    imgs = torch.tensor(imgs["train"], dtype=torch.float32).to(args.device)
+    rays = torch.tensor(rays["train"], dtype=torch.float32).to(args.device)
     
     for i, batch in enumerate(sampler.iterData(imgs, rays)):
         # unpack batch
         points, directions, colours_gt = batch # (I*R*M, 3), (I*R, 3), (I*R, 4)
 
         # plot camera poses of batch
-        ray_batch = rays["test"][i*args.I:(i+1)*args.I]
-        ray_batch = {"test": ray_batch.to("cpu").detach().numpy()}
-        plot.cameraPositions(ray_batch)
+        ray_batch = rays[i*args.I:(i+1)*args.I].detach().cpu().numpy() # (I, ro+rd, H, W, 3)
+        # plot.cameraPositions(ray_batch)
         plot.cameraFoV(ray_batch)
-        plot.cameraRays(points.to("cpu").detach().numpy(), directions.to("cpu").detach().numpy(), ray_batch)
+        plot.cameraRays(points.to("cpu").detach().numpy(), directions.to("cpu").detach().numpy(), ray_batch, colours_gt.to("cpu").detach().numpy())
         plot.showPlot()
-
-    
 
 if __name__ == "__main__":
     test_iterData()
